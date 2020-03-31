@@ -1,0 +1,268 @@
+---
+title: "homework"
+output:
+  word_document: default
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Lab 4 : Report
+
+>**Use Logistic Regression In Making Binary Predictionsr** is different from the linear regression model that is often used in daily learning or work. When predicting something, such as predicting house prices, height, GDP, student performance, etc., it is found that these predicted variables are continuous variables. 
+>
+>
+>However, in some cases, the predicted variable may be a binary variable, that is, success or failure, loss or not loss, rise or fall, etc. For such problems, linear regression will be helpless. At this time, another regression method is required for prediction, that is, Logistic regression.
+
+
+### Exercise 1
+#### First Part
+##### Question 1
+Since the code has been shown, only the output results and analysis process will be shown here.
+```{r}
+# install.packages("kernlab")
+library(kernlab)
+data("spam")
+tibble::as.tibble(spam)
+
+is.factor(spam$type)
+levels(spam$type)
+
+set.seed(42)
+# spam_idx = sample(nrow(spam), round(nrow(spam) / 2))
+spam_idx = sample(nrow(spam), 1000)
+spam_trn = spam[spam_idx, ]
+spam_tst = spam[-spam_idx, ]
+
+fit_caps = glm(type ~ capitalTotal,
+               data = spam_trn, family = binomial)
+fit_selected = glm(type ~ edu + money + capitalTotal + charDollar,
+                   data = spam_trn, family = binomial)
+fit_additive = glm(type ~ .,
+                   data = spam_trn, family = binomial)
+fit_over = glm(type ~ capitalTotal * (.),
+               data = spam_trn, family = binomial, maxit = 50)
+
+# training 
+mean(ifelse(predict(fit_caps) > 0, "spam", "nonspam") != spam_trn$type)
+mean(ifelse(predict(fit_selected) > 0, "spam", "nonspam") != spam_trn$type)
+mean(ifelse(predict(fit_additive) > 0, "spam", "nonspam") != spam_trn$type)
+mean(ifelse(predict(fit_over) > 0, "spam", "nonspam") != spam_trn$type)
+
+```
+
+and
+```{r}
+library(boot)
+set.seed(1)
+cv.glm(spam_trn, fit_caps, K = 5)$delta[1]
+cv.glm(spam_trn, fit_selected, K = 5)$delta[1]
+cv.glm(spam_trn, fit_additive, K = 5)$delta[1]
+cv.glm(spam_trn, fit_over, K = 5)$delta[1]
+```
+
+
+According to the outcome, the misclassification rate of each model when the k-fold cross-validated is not used are `0.339 0.224 0.066 0.136`, and the misclassification rate of each model when the k-fold cross-validated is used are `0.217 0.159 0.087 0.137`.
+
+So the answer of the first question of exercise1 is: **the model `fit_caps` is the most underfit model**, for its misclassification rate when the k-fold cross-validated is not used and misclassification rate when the k-fold cross-validated is used are both the highest in these four models.
+
+And, **the model `fit_additive` is the most overfit model**, for its misclassification rate when the k-fold cross-validated is not used and misclassification rate when the k-fold cross-validated is used are both the lowest in these four models.
+
+##### Question 2
+
+Re-run the code above with 100 folds and a different seed of 2 as required.
+
+```{r}
+set.seed(2)
+cv.glm(spam_trn, fit_caps, K = 100)$delta[1]
+cv.glm(spam_trn, fit_selected, K = 100)$delta[1]
+cv.glm(spam_trn, fit_additive, K = 100)$delta[1]
+cv.glm(spam_trn, fit_over, K = 100)$delta[1]
+```
+
+and our conclusion is nothing different from before.
+
+#### Second Part
+##### Question 1
+
+Using the function given named `make_conf_mat` , we can generate fout confusion matrix as:
+```{r}
+make_conf_mat = function(predicted, actual) {
+  table(predicted = predicted, actual = actual)
+}
+
+spam_tst_pred = ifelse(predict(fit_additive, spam_tst) > 0,
+                       "spam",
+                       "nonspam")
+#spam_tst_pred = ifelse(predict(fit_additive, spam_tst, type = "response") > 0.5,
+#                      "spam",
+#                      "nonspam")
+
+(conf_mat_50 = make_conf_mat(predicted = spam_tst_pred, actual = spam_tst$type))
+table(spam_tst$type) / nrow(spam_tst)
+```
+
+to predict
+
+```{r}
+spam_tst_pred1 = ifelse(predict(fit_caps, spam_tst) > 0,
+                       "spam",
+                       "nonspam")
+spam_tst_pred2 = ifelse(predict(fit_selected, spam_tst) > 0,
+                       "spam",
+                       "nonspam")
+spam_tst_pred3 = ifelse(predict(fit_additive, spam_tst) > 0,
+                       "spam",
+                       "nonspam")
+spam_tst_pred4 = ifelse(predict(fit_over, spam_tst) > 0,
+                       "spam",
+                       "nonspam")
+
+(conf_mat_caps<-make_conf_mat(predicted = spam_tst_pred1, actual = spam_tst$type))
+(conf_mat_selected<-make_conf_mat(predicted = spam_tst_pred2, actual = spam_tst$type))
+(conf_mat_additive<-make_conf_mat(predicted = spam_tst_pred3, actual = spam_tst$type))
+(conf_mat_over<-make_conf_mat(predicted = spam_tst_pred4, actual = spam_tst$type))
+
+```
+
+##### Question 2
+
+As for the overall accuracy, we can use function to calculate Prev value as:
+
+```{r}
+prev_calcu<-function(mat){
+  prev<-sum(diag(mat))/sum(mat)
+  prev
+}
+```
+Using this fuction, we can generate four overall accuracy like:
+
+```{r}
+prev_calcu(conf_mat_caps)
+prev_calcu(conf_mat_selected)
+prev_calcu(conf_mat_additive)
+prev_calcu(conf_mat_over)
+```
+
+so the overall accuracy for each model are about `0.66`,`0.80`,`0.92`,`0.84` .
+
+And the function below can calculate the sensitivity value and specificity value:
+
+```{r}
+sens_calcu<-function(mat){
+  prev<-mat[1,1]/sum(mat[,1])
+  prev
+}
+
+spec_calcu<-function(mat){
+  prev<-mat[2,2]/sum(mat[,2])
+  prev
+}
+
+sens_calcu(conf_mat_caps)
+sens_calcu(conf_mat_selected)
+sens_calcu(conf_mat_additive)
+sens_calcu(conf_mat_over)
+
+spec_calcu(conf_mat_caps)
+spec_calcu(conf_mat_selected)
+spec_calcu(conf_mat_additive)
+spec_calcu(conf_mat_over)
+```
+
+Considering the sensitivity value and specificity value, the first three models have good ability in identify spam emails from all the spam emails. But for identify no-spam emails from all no-spam emails, the first two models seems too strict that may let the user of email account miss some inportant information, which is worse than identify spam emails to good ones.
+
+Above all, as far as I'm concerned, the third model, which names `fit_additive` is the best among four models for it's high sensitivity value and more importantly, the specificity value. The model `fit_over` also do well in specificity value but the improvment on specificity is not obvious and is too lenient in filtering spam, which will cause a lot of spam to flood the user homepage.
+
+
+### Exercise 2
+
+#### Create Split
+Holding 4521 observations, we split the data in 2:1, that is:
+```{r}
+dat<-read.csv('bank.csv')
+
+yes_idx = sample(nrow(dat), 3014)
+yes_trn = dat[yes_idx, ]
+yes_tst = dat[-yes_idx, ]
+```
+
+#### Logistic Regression
+Using the `cv.glm()` function and set the data and K value, we got:
+```{r}
+fit_yes<-glm(y ~ .,data = yes_trn, family = binomial)
+summary(fit_yes)
+
+cv_yes<-cv.glm(yes_trn, fit_yes, K = 10)
+cv_yes$delta[1]
+```
+
+#### Outcome Interpretation
+On the basis of the outcome and summary, the `Intercept` and variables `contactunknown`,`monthmar`,`monthoct`,`monthsep`,`duration`,`previous`,`loanyes`,`monthjul`,`campaign` has significant impact on y if we set the significant code to `0.01`.
+Among these variables, `contactunknown` ,`loanyes`,`campaign`,`monthjul` has a negative coefficient, which means that if the contact is unkown or the user is in debt or it's in July, or more campiagh there are, it's more likely to have `y = no`. 
+
+And variables `monthmar`,`monthoct`,`monthsep`,`previous` has a positive coefficient, which means that the higher previous are, or if it's in March,September or October, it's more likely to have `y = yes`.
+
+#### Confusion Matrix and Evaluation
+
+As same as in exercise 1, use:
+```{r}
+yes_tst_pred = ifelse(predict(fit_yes, yes_tst) > 0,
+                      "yes",
+                      "no")
+
+(conf_mat_yes<-make_conf_mat(predicted = yes_tst_pred, actual = yes_tst$y))
+
+prev_calcu(conf_mat_yes)
+sens_calcu(conf_mat_yes)
+spec_calcu(conf_mat_yes)
+```
+
+the Prev value and sensitivity is good but the specificity is awful, obviously the model is kind of overfitted. So I first set the training set smaller with `1507` observation and use same fit model and it got:
+```
+> prev_calcu(conf_mat_yes)
+[1] 0.8865295
+> sens_calcu(conf_mat_yes)
+[1] 0.9710961
+> spec_calcu(conf_mat_yes)
+[1] 0.2428571
+```
+ but the specificity is still awful. And I set the K value to 100 while keep training set of 3014, still got:
+```
+> prev_calcu(conf_mat_yes)
+[1] 0.8984738
+> sens_calcu(conf_mat_yes)
+[1] 0.9768311
+> spec_calcu(conf_mat_yes)
+[1] 0.2781065
+```
+
+And I fit another small model:
+```{r}
+fit_yes_small<-glm(y~housing+contact+month+duration,data = yes_trn, family = binomial)
+
+cv_yes_small<-cv.glm(yes_trn, fit_yes_small, K = 10)
+cv_yes_small$delta[1]
+
+yes_tst_pred_small = ifelse(predict(fit_yes_small, yes_tst) > 0,
+                      "yes",
+                      "no")
+
+(conf_mat_yes_small<-make_conf_mat(predicted = yes_tst_pred_small, actual = yes_tst$y))
+
+prev_calcu(conf_mat_yes_small)
+sens_calcu(conf_mat_yes_small)
+spec_calcu(conf_mat_yes_small)
+```
+
+So according to the jod done, I think the problem is not the model or K value or the scale of training set. Every outcome generated is reasonable.
+
+
+
+
+
+
+
+
