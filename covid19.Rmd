@@ -1,0 +1,99 @@
+---
+title: "final"
+output: word_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Part 1 : Data Cleaning and Packages Loading
+```{r}
+library(psych)
+library(ggplot2)
+library(car)
+# for spreading maps but didn't use
+# require('ncovr')
+# require(leafletCN)
+```
+
+and
+```{r}
+# read data
+dat<-read.csv('data120-227.csv')
+# number of observation
+n<-dim(dat)[1]
+# show structure of data
+str(dat)
+describe(dat)
+```
+
+## Part 2 : Descriptive Statistical Analysis
+```{r}
+dat$seq<-c(1:n)
+
+ggplot(dat,aes(x=seq, y=confirm.new.)) + geom_bar(stat="identity") + xlab('Days')+ylab('Confirm Today')
+ggplot(dat,aes(x=seq, y=close.new.)) + geom_bar(stat="identity") + xlab('Days')+ylab('Close Contacts Today')
+ggplot(dat,aes(x=seq, y=next.day.confirm)) + geom_bar(stat="identity") + xlab('Days')+ylab('Confirm The Next Day')
+
+ggplot(dat,aes(x=seq, y=confirm.all.)) + geom_bar(stat="identity") + xlab('Days')+ylab('All Confirm')
+ggplot(dat,aes(x=seq, y=death.all.)) + geom_bar(stat="identity") + xlab('Days')+ylab('All Death')
+ggplot(dat,aes(x=seq, y=cured.all.)) + geom_bar(stat="identity") + xlab('Days')+ylab('All Cured')
+ggplot(dat,aes(x=seq, y=close.all.)) + geom_bar(stat="identity") + xlab('Days')+ylab('All Close Contacts')
+
+ggplot(dat,aes(x=seq, y=serious.now.)) + geom_bar(stat="identity") + xlab('Days')+ylab('All Serious Case Now')
+ggplot(dat,aes(x=seq, y=medical)) + geom_bar(stat="identity") + xlab('Days')+ylab('All in Medical Observation Now')
+
+```
+
+## Part 3 : Linear Regression Analysis
+```{r}
+dat$date<-NULL
+dat$seq<-NULL
+lmfit<-lm(data = dat, formula = next.day.confirm ~ .)
+summary(lmfit)
+```
+
+Hypothesis test and residual variance test：
+```{r}
+par(mfrow=c(2,2))
+plot(lmfit)
+```
+The results obtained from the summary function are already known, and the model as a whole is significant. According to the image, the residuals follow a normal distribution and the number of outliers is small. The model fitting results are good.
+
+
+Multicollinearity test:
+```{r}
+kappa(cor(dat))
+eigen(cor(dat))
+vif(lmfit)
+```
+
+There's serious multicollinearity problem. This is because for the time series data of the epidemic situation, from the definition of each variable, it can be known that each variable must affect each other and the correlation between the variables is high, and the problem of multicollinearity cannot be avoided.
+
+
+## Part 4 : Principal component analysis
+```{r}
+fa.parallel(dat, fa = 'pc', n.iter = 100, show.legend = FALSE)
+
+```
+
+```{r}
+dat.pca <- principal(dat, nfactors = 2, rotate = "none")
+dat.pca$weights
+plot(dat.pca,xlab='PCA1',ylab='PCA2')
+dat.pca
+```
+According to the weight of each variable, it can be seen that among the extracted principal components, principal component 1 mainly includes cumulative variables, while principal component 2 mainly includes newly added variables. Through the principal component graph, this conclusion can also be fully proved.
+
+
+```{r}
+X.prin<-as.matrix(dat)%*%dat.pca$weights
+lm.prin<-lm(dat[,9]~X.prin)
+summary(lm.prin)
+
+par(mfrow=c(2,2))
+plot(lm.prin)
+```
+
+The saliency of the model is significantly improved after extracting factors from the original data and rotating the principal components, and the model fitting effect is very good.
